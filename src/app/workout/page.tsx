@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { ArrowLeft, CheckCircle, Circle, Timer, Trophy } from "lucide-react";
+import { ArrowLeft, CheckCircle, Circle, Timer, Trophy, Loader2 } from "lucide-react";
 
-// 1. The "Smart" Workout Database
-// This matches the goals you set in the onboarding page exactly.
 const WORKOUT_PLANS: any = {
   "Calisthenics": [
     { name: "Push-ups", sets: "3", reps: "15-20", rest: "60s" },
@@ -43,14 +41,12 @@ export default function WorkoutPage() {
   const { user } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false); // New state for saving
   const [goal, setGoal] = useState("General Fitness");
-  
-  // State to track which exercises are "Checked Off"
   const [completed, setCompleted] = useState<number[]>([]); 
 
   useEffect(() => {
     if (!user) return;
-    // Fetch the user's goal from Supabase
     const fetchGoal = async () => {
       const { data } = await supabase
         .from('profiles')
@@ -72,21 +68,36 @@ export default function WorkoutPage() {
     }
   };
 
-  const finishWorkout = () => {
-    alert("Great work! Session recorded."); // Later we can save this to DB
-    router.push('/dashboard');
+  // REAL DATABASE SAVE FUNCTION
+  const finishWorkout = async () => {
+    if (!user) return;
+    setSubmitting(true);
+
+    // 1. Insert the log into Supabase
+    const { error } = await supabase.from('workout_logs').insert({
+      user_id: user.id,
+      workout_name: goal,
+      completed_at: new Date().toISOString()
+    });
+
+    if (error) {
+      console.error("Error logging workout:", error);
+      alert("Failed to save workout. Check console.");
+      setSubmitting(false);
+    } else {
+      // 2. Redirect to dashboard on success
+      router.push('/dashboard');
+    }
   };
 
-  // Select the correct plan based on the user's goal
   const exercises = WORKOUT_PLANS[goal] || WORKOUT_PLANS["General Fitness"];
   const progress = (completed.length / exercises.length) * 100;
 
   if (loading) return <div className="min-h-screen bg-[#050505] text-white flex items-center justify-center">Loading Plan...</div>;
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white p-6 pb-24">
+    <div className="min-h-screen bg-[#050505] text-white p-6 pb-32">
       
-      {/* Header */}
       <div className="max-w-3xl mx-auto mb-8 flex items-center justify-between">
         <button onClick={() => router.back()} className="p-2 hover:bg-white/10 rounded-full transition">
           <ArrowLeft className="text-slate-400" />
@@ -98,7 +109,6 @@ export default function WorkoutPage() {
         <div className="w-10" /> 
       </div>
 
-      {/* Progress Bar */}
       <div className="max-w-3xl mx-auto mb-10 bg-slate-900 rounded-full h-2 overflow-hidden">
         <motion.div 
           className="h-full bg-blue-500"
@@ -107,7 +117,6 @@ export default function WorkoutPage() {
         />
       </div>
 
-      {/* Exercise Cards */}
       <div className="max-w-3xl mx-auto space-y-4">
         {exercises.map((ex: any, i: number) => {
           const isDone = completed.includes(i);
@@ -124,12 +133,10 @@ export default function WorkoutPage() {
                   : 'bg-[#0F0F0F] border-white/5 hover:border-white/20'
                 }`}
             >
-              {/* Checkbox */}
               <div className={`p-3 rounded-full transition z-10 ${isDone ? 'bg-blue-500 text-white' : 'bg-white/5 text-slate-500 group-hover:bg-white/10'}`}>
                 {isDone ? <CheckCircle className="w-6 h-6" /> : <Circle className="w-6 h-6" />}
               </div>
 
-              {/* Text Info */}
               <div className="flex-1 z-10">
                 <h3 className={`text-xl font-bold mb-1 ${isDone ? 'text-blue-400 line-through' : 'text-white'}`}>
                   {ex.name}
@@ -145,18 +152,23 @@ export default function WorkoutPage() {
         })}
       </div>
 
-      {/* Finish Button */}
-      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black via-black to-transparent">
+      <div className="fixed bottom-0 left-0 w-full p-6 bg-gradient-to-t from-black via-black to-transparent z-50">
         <button 
           onClick={finishWorkout}
-          disabled={progress < 100}
+          disabled={progress < 100 || submitting}
           className={`max-w-3xl mx-auto w-full py-4 rounded-xl font-bold text-lg shadow-xl transition flex items-center justify-center gap-2
             ${progress === 100 
               ? 'bg-blue-600 text-white hover:scale-105 shadow-blue-500/50' 
               : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             }`}
         >
-          {progress === 100 ? <><Trophy className="w-5 h-5" /> COMPLETE WORKOUT</> : "COMPLETE ALL EXERCISES"}
+          {submitting ? (
+            <><Loader2 className="w-5 h-5 animate-spin" /> SAVING...</>
+          ) : progress === 100 ? (
+            <><Trophy className="w-5 h-5" /> COMPLETE WORKOUT</>
+          ) : (
+            "COMPLETE ALL EXERCISES"
+          )}
         </button>
       </div>
 
