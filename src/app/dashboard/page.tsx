@@ -4,11 +4,25 @@ import { useEffect, useState } from "react";
 import { useUser, UserButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Activity, Flame, Trophy, Dumbbell, Calendar, ChevronRight, User, Settings as SettingsIcon, Map, History, FileText, TrendingUp 
+  Activity, Flame, Trophy, Dumbbell, Calendar, ChevronRight, User, Settings as SettingsIcon, Map, History, FileText, TrendingUp, Sparkles 
 } from "lucide-react";
 import { BarChart, Bar, XAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+
+// --- MOTIVATIONAL QUOTES DATABASE ---
+const MOTIVATIONAL_QUOTES = [
+  "Consistency is what transforms average into excellence.",
+  "You don't have to be extreme, just consistent.",
+  "Your future self is watching you right now.",
+  "The only bad workout is the one that didn't happen.",
+  "Motivation is what gets you started. Habit is what keeps you going.",
+  "Don't wish for it. Work for it.",
+  "Success starts with self-discipline.",
+  "Fall in love with the process, and the results will come.",
+  "You are stronger than your excuses.",
+  "Small progress is still progress."
+];
 
 export default function Dashboard() {
   const { user, isLoaded } = useUser();
@@ -16,8 +30,11 @@ export default function Dashboard() {
   const [profile, setProfile] = useState<any>(null);
   const [streak, setStreak] = useState(0);
   const [chartData, setChartData] = useState<any[]>([]);
-  const [recentLogs, setRecentLogs] = useState<any[]>([]); // Store history
+  const [recentLogs, setRecentLogs] = useState<any[]>([]); 
   const [loading, setLoading] = useState(true);
+
+  // --- MOTIVATIONAL STATE ---
+  const [quote, setQuote] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -26,29 +43,41 @@ export default function Dashboard() {
       // 1. Fetch Profile
       const { data: profileData, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
       
-      // SAFETY CHECK: If no profile, send to onboarding
       if (error || !profileData) {
         router.push('/onboarding');
         return;
       }
       setProfile(profileData);
 
-      // 2. Fetch Logs (Sorted by newest)
+      // 2. Fetch Logs 
       const { data: logs } = await supabase
         .from('workout_logs')
-        .select('*') // Get everything including workout_name
+        .select('*') 
         .eq('user_id', user.id)
         .order('completed_at', { ascending: false });
 
       if (logs) {
         setStreak(calculateStreak(logs));
         setChartData(processChartData(logs));
-        setRecentLogs(logs.slice(0, 5)); // Keep only the last 5 for the history list
+        setRecentLogs(logs.slice(0, 5)); 
       }
       setLoading(false);
     };
 
     fetchData();
+
+    // --- MOTIVATIONAL TIMER (15s Interval, 10s Duration) ---
+    const timer = setInterval(() => {
+      const randomQuote = MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+      setQuote(randomQuote);
+
+      // Hide it after 10 seconds
+      setTimeout(() => setQuote(null), 10000);
+
+    }, 15000); // Trigger every 15 seconds
+
+    return () => clearInterval(timer);
+
   }, [user, router]);
 
   // Streak & Chart Logic
@@ -90,9 +119,32 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white selection:bg-blue-500/30">
+    <div className="min-h-screen bg-[#050505] text-white selection:bg-blue-500/30 relative">
       
-      <nav className="border-b border-white/10 bg-black/50 backdrop-blur-xl sticky top-0 z-50">
+      {/* --- MOTIVATIONAL POPUP COMPONENT --- */}
+      <AnimatePresence>
+        {quote && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-10 right-6 z-50 max-w-sm"
+          >
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 rounded-2xl shadow-2xl border border-white/20 flex items-center gap-4">
+              <div className="p-2 bg-white/20 rounded-full shrink-0">
+                <Sparkles className="w-5 h-5 text-white animate-pulse" />
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Coach Says:</p>
+                <p className="text-white font-bold text-sm italic leading-tight">"{quote}"</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ------------------------------------ */}
+
+      <nav className="border-b border-white/10 bg-black/50 backdrop-blur-xl sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-black italic">FJ</div>
@@ -115,13 +167,12 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto p-6 space-y-8">
         
-        {/* --- HEADER SECTION WITH NEW BUTTONS --- */}
+        {/* --- HEADER SECTION --- */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col md:flex-row justify-between items-end gap-4">
           <div>
             <h1 className="text-4xl md:text-5xl font-black italic uppercase tracking-tighter text-white">Headquarters</h1>
             <p className="text-slate-400 mt-2 text-lg">Your <span className="text-blue-500 font-bold">{profile?.goal}</span> protocol is active.</p>
             
-            {/* NEW BUTTONS HERE */}
             <div className="flex gap-3 mt-6">
               <button 
                 onClick={() => router.push('/checkin')}
@@ -148,10 +199,8 @@ export default function Dashboard() {
                 <h3 className="text-xl font-bold text-white">Your 100-Day Roadmap</h3>
             </div>
             
-            {/* The Timeline */}
             <div className="relative z-10">
                 <div className="absolute top-1/2 left-0 w-full h-1 bg-slate-800 -translate-y-1/2 rounded-full"></div>
-                {/* Progress Fill */}
                 <motion.div 
                     className="absolute top-1/2 left-0 h-1 bg-blue-500 -translate-y-1/2 rounded-full" 
                     initial={{ width: 0 }}
